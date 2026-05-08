@@ -17,7 +17,9 @@ Building an agent is easy. Knowing whether yesterday's prompt tweak made it *bet
 
 Most teams ship agents with vibes-based testing — a few manual prompts, no structured rubric, no regression catching. RubricLab is the missing dev-loop tool: write test cases once, score every change automatically, and see exactly where behavior drifted.
 
-### What works today (M1)
+### What works today (M2)
+
+**M1 — scaffold**
 
 - Monorepo scaffold: `apps/api` (FastAPI), `apps/web` (Next.js 15), `packages/shared` TypeScript types
 - FastAPI skeleton boots at `localhost:8000`; `GET /` and `GET /health` are live
@@ -27,14 +29,20 @@ Most teams ship agents with vibes-based testing — a few manual prompts, no str
 - Docker Compose stub wires both services with a named SQLite volume
 - MIT license, `.gitignore`, `.prettierrc`
 
+**M2 — data model + storage**
+
+- SQLModel table definitions for all six core entities: `Suite`, `Case`, `Run`, `CaseResult`, `Trace`, `RubricScore` (`apps/api/src/rubriclab/models.py`)
+- SQLite bootstrap: `create_tables()` runs on startup; database file at `data/rubriclab.db`, configurable via `DATABASE_URL` env var (`apps/api/src/rubriclab/database.py`)
+- Repository layer: CRUD helpers for every entity — `create_suite`, `list_cases`, `create_run`, `create_trace`, `create_rubric_score`, and more (`apps/api/src/rubriclab/repository.py`)
+- Demo suite seeded on first boot: **"Research Agent v1"** with 8 cases spanning factual, tool-use, format, and reasoning categories; seed is idempotent (`apps/api/src/rubriclab/seed.py`)
+- Test suite covering model round-trips and repository integration (`apps/api/tests/`)
+
 ### Planned
 
-- **Test suites** — collections of test cases, each with an input (user message + optional context), expected behavior criteria, and a weighted rubric (e.g. *correctness*, *tool-use efficiency*, *format adherence*)
 - **Agent runner** — pluggable interface (`run(input) -> trace`) that executes your agent and captures the full trace: model calls, tool calls, intermediate messages, final output, latency, token usage
 - **LLM-as-judge engine** — Anthropic-powered judge scores each trace against the rubric and emits per-dimension scores + written justification
 - **Dashboard** — Next.js UI to browse suites, trigger runs, view pass/fail per case, open trace timelines, and diff two runs side-by-side to highlight regressions
 - **CLI** — trigger runs from CI: `rubriclab run --suite=demo`
-- **SQLite storage** — zero external dependencies for local use (SQLModel, M2)
 
 ---
 
@@ -74,7 +82,7 @@ pnpm dev
 
 ## Architecture
 
-> Target architecture — components beyond the API/web shells ship in M2+.
+> M2 shipped the SQLite storage layer. Remaining components (AgentRunner, JudgeEngine, dashboard, CLI) ship in M3+.
 
 ```
 ┌─────────────────────────┐    ┌──────────────────────────┐
@@ -110,7 +118,7 @@ pnpm dev
 
 ## Demo flow
 
-> This describes the intended experience at M8. Currently only the scaffold, health endpoint, and web stub are available.
+> This describes the intended experience at M8. Currently the scaffold, health endpoint, web stub, full data model, SQLite storage, and demo suite (seeded at startup) are available.
 
 1. `docker compose up` (or local Python + pnpm dev)
 2. Open dashboard → see preloaded **"Research Agent v1"** suite with 8 cases
@@ -126,7 +134,7 @@ pnpm dev
 | Milestone | Description | Status |
 |-----------|-------------|--------|
 | M1 | Scaffold + README | ✅ Done |
-| M2 | SQLite data model (SQLModel) | ⬜ Planned |
+| M2 | SQLite data model (SQLModel) | ✅ Done |
 | M3 | Agent runner + trace capture | ⬜ Planned |
 | M4 | LLM-as-judge engine | ⬜ Planned |
 | M5 | FastAPI routes (/suites, /runs, /cases, /traces, /diff) | ⬜ Planned |
