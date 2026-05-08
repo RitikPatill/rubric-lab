@@ -1,5 +1,3 @@
-// TODO: align with SQLModel schemas in M2
-
 export type RubricDimension = {
   id: string
   name: string
@@ -10,17 +8,20 @@ export type RubricDimension = {
 export type Case = {
   id: string
   suiteId: string
+  title: string
   input: string
   context?: string
   expectedBehavior: string
   rubric: RubricDimension[]
+  createdAt: string
 }
 
 export type Suite = {
   id: string
   name: string
   description: string
-  cases: Case[]
+  createdAt: string
+  cases?: Case[]
 }
 
 export type Trace = {
@@ -42,6 +43,7 @@ export type RubricScore = {
   id: string
   caseResultId: string
   dimensionId: string
+  dimensionName: string
   score: number
   justification: string
 }
@@ -58,6 +60,7 @@ export type CaseResult = {
 export type Run = {
   id: string
   suiteId: string
+  status: 'pending' | 'running' | 'done' | 'failed'
   createdAt: string
   results: CaseResult[]
 }

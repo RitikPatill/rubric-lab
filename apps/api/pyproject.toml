@@ -1,15 +1,17 @@
 [project]
 name = "rubriclab-api"
 version = "0.1.0"
-requires-python = ">=3.12"
+requires-python = ">=3.10"
 dependencies = [
   "fastapi>=0.115,<0.116",
   "uvicorn[standard]>=0.32,<0.33",
+  "sqlmodel>=0.0.22,<0.1",
 ]
 
 [dependency-groups]
 dev = [
   "ruff>=0.8,<0.9",
+  "pytest>=8.3,<9.0",
 ]
 
 [build-system]
@@ -21,7 +23,11 @@ packages = ["src/rubriclab"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py312"
+target-version = "py310"
 
 [tool.ruff.lint]
 select = ["E", "F", "I"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
