@@ -17,7 +17,9 @@ Building an agent is easy. Knowing whether yesterday's prompt tweak made it *bet
 
 Most teams ship agents with vibes-based testing — a few manual prompts, no structured rubric, no regression catching. RubricLab is the missing dev-loop tool: write test cases once, score every change automatically, and see exactly where behavior drifted.
 
-### What works today (M1)
+### What works today (M1–M3)
+
+**M1 — Scaffold**
 
 - Monorepo scaffold: `apps/api` (FastAPI), `apps/web` (Next.js 15), `packages/shared` TypeScript types
 - FastAPI skeleton boots at `localhost:8000`; `GET /` and `GET /health` are live
@@ -27,14 +29,32 @@ Most teams ship agents with vibes-based testing — a few manual prompts, no str
 - Docker Compose stub wires both services with a named SQLite volume
 - MIT license, `.gitignore`, `.prettierrc`
 
+**M2 — SQLite data model**
+
+- SQLModel ORM tables: `Suite`, `Case`, `Run`, `CaseResult`, `Trace`, `RubricScore`
+- `repository.py` — typed CRUD helpers for all entities
+- `seed.py` — pre-loads a demo suite with sample cases on first boot
+- Zero external database dependencies; single SQLite file, fully portable
+
+**M3 — Agent runner + trace capture**
+
+- `AgentRunner` Protocol (`runner.py`) — pluggable interface: `run(input, context) -> TraceData`
+- `AgentResult` dataclass — `output`, `events`, `latency_ms`, `input_tokens`, `output_tokens`
+- `run_case()` orchestrator — executes one test case, writes `CaseResult` and `Trace` to SQLite; scoring deferred to M4
+- `ResearchAgent` (`agents/research.py`) — sample agent backed by Anthropic Claude Haiku with two tools:
+  - `web_search` — canned keyword-match stub returning deterministic results (no live network call required)
+  - `calculator` — AST-based safe arithmetic evaluator; rejects anything that is not a numeric expression
+- Full trace capture per agent loop iteration: `user_message`, `model_response` (with stop reason and per-call token counts), `tool_call`, `tool_result` events, each timestamped
+- Aggregate latency (wall-clock ms) and token totals accumulated across all agentic loop turns
+- System prompt loaded from `agents/research/prompt.md` at repo root — edit it to change agent behavior without touching source code; inline fallback if the file is absent
+- Injectable `client` constructor argument on `ResearchAgent` for unit testing without a real API key
+
 ### Planned
 
-- **Test suites** — collections of test cases, each with an input (user message + optional context), expected behavior criteria, and a weighted rubric (e.g. *correctness*, *tool-use efficiency*, *format adherence*)
-- **Agent runner** — pluggable interface (`run(input) -> trace`) that executes your agent and captures the full trace: model calls, tool calls, intermediate messages, final output, latency, token usage
 - **LLM-as-judge engine** — Anthropic-powered judge scores each trace against the rubric and emits per-dimension scores + written justification
+- **FastAPI routes** — `/suites`, `/runs`, `/cases`, `/traces`, `/diff` REST endpoints
 - **Dashboard** — Next.js UI to browse suites, trigger runs, view pass/fail per case, open trace timelines, and diff two runs side-by-side to highlight regressions
 - **CLI** — trigger runs from CI: `rubriclab run --suite=demo`
-- **SQLite storage** — zero external dependencies for local use (SQLModel, M2)
 
 ---
 
@@ -74,7 +94,7 @@ pnpm dev
 
 ## Architecture
 
-> Target architecture — components beyond the API/web shells ship in M2+.
+> Architecture as of M3. `AgentRunner`, `ResearchAgent`, and SQLite persistence are live. `JudgeEngine` and REST routes ship in M4–M5.
 
 ```
 ┌─────────────────────────┐    ┌──────────────────────────┐
@@ -110,7 +130,7 @@ pnpm dev
 
 ## Demo flow
 
-> This describes the intended experience at M8. Currently only the scaffold, health endpoint, and web stub are available.
+> This describes the intended experience at M8. The data model, agent runner, and trace capture are live (M1–M3); the REST API, dashboard, and CLI ship in M4–M9.
 
 1. `docker compose up` (or local Python + pnpm dev)
 2. Open dashboard → see preloaded **"Research Agent v1"** suite with 8 cases
@@ -126,8 +146,8 @@ pnpm dev
 | Milestone | Description | Status |
 |-----------|-------------|--------|
 | M1 | Scaffold + README | ✅ Done |
-| M2 | SQLite data model (SQLModel) | ⬜ Planned |
-| M3 | Agent runner + trace capture | ⬜ Planned |
+| M2 | SQLite data model (SQLModel) | ✅ Done |
+| M3 | Agent runner + trace capture | ✅ Done |
 | M4 | LLM-as-judge engine | ⬜ Planned |
 | M5 | FastAPI routes (/suites, /runs, /cases, /traces, /diff) | ⬜ Planned |
 | M6 | Next.js dashboard (suite browser, run trigger, results) | ⬜ Planned |
