@@ -17,7 +17,7 @@ Building an agent is easy. Knowing whether yesterday's prompt tweak made it *bet
 
 Most teams ship agents with vibes-based testing — a few manual prompts, no structured rubric, no regression catching. RubricLab is the missing dev-loop tool: write test cases once, score every change automatically, and see exactly where behavior drifted.
 
-### What works today (M1–M3)
+### What works today (M1–M4)
 
 **M1 — Scaffold**
 
@@ -38,20 +38,30 @@ Most teams ship agents with vibes-based testing — a few manual prompts, no str
 
 **M3 — Agent runner + trace capture**
 
-- `AgentRunner` Protocol (`runner.py`) — pluggable interface: `run(input, context) -> TraceData`
-- `AgentResult` dataclass — `output`, `events`, `latency_ms`, `input_tokens`, `output_tokens`
-- `run_case()` orchestrator — executes one test case, writes `CaseResult` and `Trace` to SQLite; scoring deferred to M4
+- `AgentRunner` Protocol (`runner.py`) — pluggable interface: `run(input, context) -> TraceResult`
+- `TraceResult` dataclass — `final_output`, `events`, `latency_ms`, `input_tokens`, `output_tokens`; `RunResult` is a backward-compatible alias
+- `run_case()` orchestrator — executes one test case, writes `CaseResult` and `Trace` to SQLite
 - `ResearchAgent` (`agents/research.py`) — sample agent backed by Anthropic Claude Haiku with two tools:
   - `web_search` — canned keyword-match stub returning deterministic results (no live network call required)
   - `calculator` — AST-based safe arithmetic evaluator; rejects anything that is not a numeric expression
-- Full trace capture per agent loop iteration: `user_message`, `model_response` (with stop reason and per-call token counts), `tool_call`, `tool_result` events, each timestamped
+- Full trace capture per agent loop iteration: `model_call` (with stop reason and per-call token counts), `tool_call`, `tool_result`, and `final_output` events, each timestamped in UTC ISO-8601
 - Aggregate latency (wall-clock ms) and token totals accumulated across all agentic loop turns
 - System prompt loaded from `agents/research/prompt.md` at repo root — edit it to change agent behavior without touching source code; inline fallback if the file is absent
-- Injectable `client` constructor argument on `ResearchAgent` for unit testing without a real API key
+- Optional `api_key` constructor argument; unit tests mock the Anthropic class via `unittest.mock.patch` — no live API key required to run the test suite
+
+**M4 — LLM-as-judge engine**
+
+- `JudgeEngine` (`judge.py`) — scores a `TraceResult` against a list of rubric dimensions using Anthropic tool-use (`submit_scores`), forcing structured JSON output and eliminating free-text parsing
+- `DimensionScore` dataclass — `dimension_id`, `dimension_name`, `score` (0.0–1.0, clamped), `justification` (one sentence from the judge)
+- `JudgeResult` dataclass — `scores: list[DimensionScore]`, `weighted_score` (normalised by dimension weights), `passed` bool
+- Configurable `pass_threshold` (default 0.7); weights need not sum to 1.0 — the engine normalises them automatically
+- Empty-rubric guard: if a case has no dimensions, returns `passed=False` immediately without an API call
+- Graceful fallback: if the Claude call fails, all scores default to 0.0 and the case is marked failed
+- `run_case()` extended with optional `judge` parameter — when provided, persists `RubricScore` rows (with `dimension_name`) to SQLite and sets `CaseResult.passed`
+- Rubric YAML DSL (`rubrics/research-v1.yaml`, `rubrics/research_agent.yaml`): each dimension defines `id`, `name`, `description`, and `weight`; a suite-level `pass_threshold` key overrides the engine default — schema reference for the M5 CLI loader
 
 ### Planned
 
-- **LLM-as-judge engine** — Anthropic-powered judge scores each trace against the rubric and emits per-dimension scores + written justification
 - **FastAPI routes** — `/suites`, `/runs`, `/cases`, `/traces`, `/diff` REST endpoints
 - **Dashboard** — Next.js UI to browse suites, trigger runs, view pass/fail per case, open trace timelines, and diff two runs side-by-side to highlight regressions
 - **CLI** — trigger runs from CI: `rubriclab run --suite=demo`
@@ -94,7 +104,7 @@ pnpm dev
 
 ## Architecture
 
-> Architecture as of M3. `AgentRunner`, `ResearchAgent`, and SQLite persistence are live. `JudgeEngine` and REST routes ship in M4–M5.
+> Architecture as of M4. `AgentRunner`, `ResearchAgent`, SQLite persistence, and `JudgeEngine` are live. REST routes and dashboard ship in M5–M6.
 
 ```
 ┌─────────────────────────┐    ┌──────────────────────────┐
@@ -130,7 +140,7 @@ pnpm dev
 
 ## Demo flow
 
-> This describes the intended experience at M8. The data model, agent runner, and trace capture are live (M1–M3); the REST API, dashboard, and CLI ship in M4–M9.
+> This describes the intended experience at M8. The data model, agent runner, trace capture, and judge engine are live (M1–M4); the REST API, dashboard, and CLI ship in M5–M9.
 
 1. `docker compose up` (or local Python + pnpm dev)
 2. Open dashboard → see preloaded **"Research Agent v1"** suite with 8 cases
@@ -147,12 +157,12 @@ pnpm dev
 |-----------|-------------|--------|
 | M1 | Scaffold + README | ✅ Done |
 | M2 | SQLite data model (SQLModel) | ✅ Done |
-| M3 | Agent runner + trace capture | ✅ Done |
-| M4 | LLM-as-judge engine | ⬜ Planned |
+| M3 | Agent runner, trace capture + sample research agent | ✅ Done |
+| M4 | LLM-as-judge engine | ✅ Done |
 | M5 | FastAPI routes (/suites, /runs, /cases, /traces, /diff) | ⬜ Planned |
 | M6 | Next.js dashboard (suite browser, run trigger, results) | ⬜ Planned |
 | M7 | Trace viewer + two-run diff UI | ⬜ Planned |
-| M8 | Sample research agent + demo suite | ⬜ Planned |
+| M8 | End-to-end demo + polish | ⬜ Planned |
 | M9 | CLI (`rubriclab run --suite=demo`) | ⬜ Planned |
 
 ---

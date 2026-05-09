@@ -1,0 +1,41 @@
+# RubricLab rubric schema v1
+# Each entry under `dimensions` maps 1:1 to a dict in Case.rubric (JSON column).
+# All weights should sum to 1.0 per case; the engine normalises if they don't.
+
+suite: "Research Agent v1"
+pass_threshold: 0.5  # weighted_score >= threshold → CaseResult.passed = True
+
+dimensions:
+  - id: correctness
+    name: Correctness
+    description: >
+      The agent's final answer is factually accurate and directly
+      addresses the user's question.
+    weight: 0.6
+
+  - id: tool_use_efficiency
+    name: Tool-use Efficiency
+    description: >
+      The agent invoked tools appropriately: correct tool chosen,
+      inputs well-formed, no redundant calls.
+    weight: 0.2
+
+  - id: format_adherence
+    name: Format Adherence
+    description: >
+      The response follows any formatting requirements stated in
+      the question (JSON, markdown list, etc.).
+    weight: 0.1
+
+  - id: reasoning_quality
+    name: Reasoning Quality
+    description: >
+      Intermediate reasoning steps are shown, correct, and relevant
+      to the final answer.
+    weight: 0.1
+
+  - id: completeness
+    name: Completeness
+    description: >
+      All parts of a multi-part question are answered.
+    weight: 0.4   # adjust per-case; weights are per-case not global

@@ -37,12 +37,16 @@ class _SafeVisitor(ast.NodeVisitor):
     def visit_BinOp(self, node: ast.BinOp) -> None:
         if not isinstance(node.op, _ALLOWED_BINOP):
             raise ValueError(f"Unsupported operator: {type(node.op).__name__}")
-        self.generic_visit(node)
+        # Visit operands only — generic_visit would also iterate node.op (e.g. ast.Add),
+        # which is not in the allowed-types list and would raise ValueError.
+        self.visit(node.left)
+        self.visit(node.right)
 
     def visit_UnaryOp(self, node: ast.UnaryOp) -> None:
         if not isinstance(node.op, _ALLOWED_UNOP):
             raise ValueError(f"Unsupported unary operator: {type(node.op).__name__}")
-        self.generic_visit(node)
+        # Visit operand only — same reason as visit_BinOp above.
+        self.visit(node.operand)
 
     def visit_Constant(self, node: ast.Constant) -> None:
         if not isinstance(node.value, (int, float)):

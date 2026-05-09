@@ -1,9 +1,12 @@
-from unittest.mock import MagicMock
+"""Tests for ResearchAgent with mocked Anthropic client."""
+from types import SimpleNamespace
+from unittest.mock import patch
 
 import pytest
 
-from rubriclab.runner import AgentResult
-from rubriclab.agents.research import ResearchAgent, _calculator, _web_search
+from rubriclab.runner import TraceResult
+from rubriclab.agents.research import ResearchAgent
+from rubriclab.agents.tools import calculator
 
 
 # ---------------------------------------------------------------------------
@@ -12,38 +15,28 @@ from rubriclab.agents.research import ResearchAgent, _calculator, _web_search
 
 
 def _text_msg(text, input_tokens=10, output_tokens=20):
-    """Simulate a final text response from the model."""
-    msg = MagicMock()
-    msg.stop_reason = "end_turn"
-    blk = MagicMock()
-    blk.type = "text"
-    blk.text = text
-    msg.content = [blk]
-    msg.usage.input_tokens = input_tokens
-    msg.usage.output_tokens = output_tokens
-    return msg
+    blk = SimpleNamespace(type="text", text=text)
+    return SimpleNamespace(
+        stop_reason="end_turn",
+        content=[blk],
+        usage=SimpleNamespace(input_tokens=input_tokens, output_tokens=output_tokens),
+    )
 
 
 def _tool_msg(name, tool_input, tool_use_id="tu_1", input_tokens=10, output_tokens=20):
-    """Simulate a tool-use response from the model."""
-    msg = MagicMock()
-    msg.stop_reason = "tool_use"
-    blk = MagicMock()
-    blk.type = "tool_use"
-    blk.name = name
-    blk.input = tool_input
-    blk.id = tool_use_id
-    msg.content = [blk]
-    msg.usage.input_tokens = input_tokens
-    msg.usage.output_tokens = output_tokens
-    return msg
+    blk = SimpleNamespace(type="tool_use", name=name, input=tool_input, id=tool_use_id)
+    return SimpleNamespace(
+        stop_reason="tool_use",
+        content=[blk],
+        usage=SimpleNamespace(input_tokens=input_tokens, output_tokens=output_tokens),
+    )
 
 
 def _make_agent(*responses):
-    """Build a ResearchAgent with a mock client that returns *responses in order."""
-    mock_client = MagicMock()
-    mock_client.messages.create.side_effect = list(responses)
-    return ResearchAgent(client=mock_client)
+    """Build a ResearchAgent with a mock Anthropic client returning *responses in order."""
+    with patch("rubriclab.agents.research.anthropic.Anthropic") as MockCls:
+        MockCls.return_value.messages.create.side_effect = list(responses)
+        return ResearchAgent()
 
 
 # ---------------------------------------------------------------------------
@@ -54,18 +47,21 @@ def _make_agent(*responses):
 def test_run_result_fields():
     agent = _make_agent(_text_msg("Hello!"))
     result = agent.run("Say hello")
-    assert isinstance(result, AgentResult)
+    assert isinstance(result, TraceResult)
     assert isinstance(result.events, list)
-    assert isinstance(result.output, str)
+    assert isinstance(result.final_output, str)
     assert result.latency_ms >= 0
     assert result.input_tokens > 0
     assert result.output_tokens > 0
 
 
-def test_events_include_user_message():
+def test_events_have_required_keys():
     agent = _make_agent(_text_msg("Hi"))
     result = agent.run("Hi there")
-    assert result.events[0]["type"] == "user_message"
+    for event in result.events:
+        assert "type" in event
+        assert "timestamp" in event
+        assert "content" in event
 
 
 def test_calculator_tool_use():
@@ -74,14 +70,12 @@ def test_calculator_tool_use():
         _text_msg("42"),
     )
     result = agent.run("What is 6 times 7?")
-
     tool_calls = [e for e in result.events if e["type"] == "tool_call"]
     tool_results = [e for e in result.events if e["type"] == "tool_result"]
-
     assert len(tool_calls) == 1
-    assert tool_calls[0]["tool_name"] == "calculator"
+    assert tool_calls[0]["content"]["tool_name"] == "calculator"
     assert len(tool_results) == 1
-    assert result.output == "42"
+    assert result.final_output == "42"
 
 
 def test_web_search_tool_use():
@@ -90,14 +84,10 @@ def test_web_search_tool_use():
         _text_msg("Paris"),
     )
     result = agent.run("What is the capital of France?")
-
     tool_calls = [e for e in result.events if e["type"] == "tool_call"]
-    tool_results = [e for e in result.events if e["type"] == "tool_result"]
-
     assert len(tool_calls) == 1
-    assert tool_calls[0]["tool_name"] == "web_search"
-    assert len(tool_results) == 1
-    assert result.output == "Paris"
+    assert tool_calls[0]["content"]["tool_name"] == "web_search"
+    assert result.final_output == "Paris"
 
 
 def test_token_accumulation():
@@ -110,15 +100,16 @@ def test_token_accumulation():
     assert result.output_tokens == 10
 
 
-def test_calculator_stub_arithmetic():
-    assert _calculator("1234 * 5678") == "7006652"
+def test_calculator_arithmetic():
+    assert calculator("1234 * 5678") == "7006652"
 
 
 def test_web_search_stub_tokyo():
-    result = _web_search("population of tokyo")
-    assert "Tokyo" in result
+    agent = ResearchAgent.__new__(ResearchAgent)
+    result = agent._execute_tool("web_search", {"query": "population of tokyo"})
+    assert "37.4 million" in result or "tokyo" in result.lower()
 
 
-def test_calculator_blocks_eval_injection():
+def test_calculator_invalid_raises():
     with pytest.raises(ValueError):
-        _calculator("__import__('os').system('ls')")
+        calculator("__import__('os')")

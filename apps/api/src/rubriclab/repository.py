@@ -120,11 +120,12 @@ def create_rubric_score(
     dimension_id: str,
     score: float,
     justification: str,
+    dimension_name: str = "",
 ) -> RubricScore:
     obj = RubricScore(
         case_result_id=case_result_id,
         dimension_id=dimension_id,
-        dimension_name=dimension_id,
+        dimension_name=dimension_name or dimension_id,
         score=score,
         justification=justification,
     )
