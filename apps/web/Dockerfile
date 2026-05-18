@@ -11,9 +11,12 @@ COPY packages/shared ./packages/shared
 COPY apps/web ./apps/web
 
 # Install deps for web and its workspace dependencies
-RUN pnpm install --frozen-lockfile --filter @rubriclab/web...
+RUN pnpm install --filter @rubriclab/web...
 
 WORKDIR /app/apps/web
+
+ARG NEXT_PUBLIC_API_URL=http://localhost:8000
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 
 RUN pnpm build
 
