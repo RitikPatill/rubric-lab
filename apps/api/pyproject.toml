@@ -1,13 +1,12 @@
 [project]
 name = "rubriclab-api"
 version = "0.1.0"
-requires-python = ">=3.12"
+requires-python = ">=3.10"
 dependencies = [
   "fastapi>=0.115,<0.116",
   "uvicorn[standard]>=0.32,<0.33",
   "sqlmodel>=0.0.22,<0.1",
-  "anthropic>=0.40,<2.0",
-  "pyyaml>=6.0,<7.0",
+  "anthropic>=0.49,<1.0",
 ]
 
 [dependency-groups]
@@ -25,7 +24,7 @@ packages = ["src/rubriclab"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py312"
+target-version = "py310"
 
 [tool.ruff.lint]
 select = ["E", "F", "I"]

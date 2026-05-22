@@ -1,20 +1,30 @@
 import os
+from collections.abc import Generator
+from pathlib import Path
 
 from sqlmodel import Session, SQLModel, create_engine
 
-import rubriclab.models as _  # noqa: F401 — registers all table metadata
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./data/rubriclab.db")
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./rubriclab.db")
+# Ensure the data directory exists for SQLite file databases
+Path("data").mkdir(exist_ok=True)
 
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+_connect_args: dict = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
+engine = create_engine(DATABASE_URL, echo=False, connect_args=_connect_args)
 
 
-def init_db() -> None:
-    """Create all tables if they don't exist."""
+def get_engine():
+    return engine
+
+
+def create_tables() -> None:
     SQLModel.metadata.create_all(engine)
 
 
-def get_session():
-    """FastAPI dependency that yields a database session."""
+# Alias for plan compatibility
+create_db_and_tables = create_tables
+
+
+def get_session() -> Generator[Session, None, None]:
     with Session(engine) as session:
         yield session

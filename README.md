@@ -7,7 +7,7 @@
 ![Python](https://img.shields.io/badge/python-3.12-blue)
 ![Next.js](https://img.shields.io/badge/next.js-15-black)
 
-> Screenshot coming in M8
+![Dashboard screenshot](docs/screenshot.png)
 
 ---
 
@@ -17,54 +17,35 @@ Building an agent is easy. Knowing whether yesterday's prompt tweak made it *bet
 
 Most teams ship agents with vibes-based testing — a few manual prompts, no structured rubric, no regression catching. RubricLab is the missing dev-loop tool: write test cases once, score every change automatically, and see exactly where behavior drifted.
 
-### What works today (M1–M4)
+### What works today (M8)
 
-**M1 — Scaffold**
+**M1 — scaffold**
+- Monorepo: `apps/api` (FastAPI), `apps/web` (Next.js 15), `packages/shared` TypeScript types
+- `GET /` and `GET /health` live; dev tooling (uv + ruff, pnpm + prettier + eslint)
 
-- Monorepo scaffold: `apps/api` (FastAPI), `apps/web` (Next.js 15), `packages/shared` TypeScript types
-- FastAPI skeleton boots at `localhost:8000`; `GET /` and `GET /health` are live
-- Next.js 15 app scaffold at `localhost:3000`
-- Shared TypeScript domain types: `Suite`, `Case`, `Run`, `CaseResult`, `Trace`, `TraceEvent`, `RubricDimension`, `RubricScore` (see `packages/shared/src/index.ts`)
-- Dev tooling configured: uv + ruff for Python, pnpm + prettier + eslint for JS/TS
-- Docker Compose stub wires both services with a named SQLite volume
-- MIT license, `.gitignore`, `.prettierrc`
+**M2 — data model + storage**
+- SQLModel entities: `Suite`, `Case`, `Run`, `CaseResult`, `Trace`, `RubricScore`
+- SQLite bootstrap on startup; demo suite "Research Agent v1" (8 cases) seeded idempotently
 
-**M2 — SQLite data model**
-
-- SQLModel ORM tables: `Suite`, `Case`, `Run`, `CaseResult`, `Trace`, `RubricScore`
-- `repository.py` — typed CRUD helpers for all entities
-- `seed.py` — pre-loads a demo suite with sample cases on first boot
-- Zero external database dependencies; single SQLite file, fully portable
-
-**M3 — Agent runner + trace capture**
-
-- `AgentRunner` Protocol (`runner.py`) — pluggable interface: `run(input, context) -> TraceResult`
-- `TraceResult` dataclass — `final_output`, `events`, `latency_ms`, `input_tokens`, `output_tokens`; `RunResult` is a backward-compatible alias
-- `run_case()` orchestrator — executes one test case, writes `CaseResult` and `Trace` to SQLite
-- `ResearchAgent` (`agents/research.py`) — sample agent backed by Anthropic Claude Haiku with two tools:
-  - `web_search` — canned keyword-match stub returning deterministic results (no live network call required)
-  - `calculator` — AST-based safe arithmetic evaluator; rejects anything that is not a numeric expression
-- Full trace capture per agent loop iteration: `model_call` (with stop reason and per-call token counts), `tool_call`, `tool_result`, and `final_output` events, each timestamped in UTC ISO-8601
-- Aggregate latency (wall-clock ms) and token totals accumulated across all agentic loop turns
-- System prompt loaded from `agents/research/prompt.md` at repo root — edit it to change agent behavior without touching source code; inline fallback if the file is absent
-- Optional `api_key` constructor argument; unit tests mock the Anthropic class via `unittest.mock.patch` — no live API key required to run the test suite
+**M3 — agent runner + trace capture**
+- `AgentRunner` protocol (`apps/api/src/rubriclab/runner.py`); `ResearchAgent` with `web_search` + `calculator` tools
 
 **M4 — LLM-as-judge engine**
+- Anthropic-powered rubric scoring with per-dimension scores and written justifications
 
-- `JudgeEngine` (`judge.py`) — scores a `TraceResult` against a list of rubric dimensions using Anthropic tool-use (`submit_scores`), forcing structured JSON output and eliminating free-text parsing
-- `DimensionScore` dataclass — `dimension_id`, `dimension_name`, `score` (0.0–1.0, clamped), `justification` (one sentence from the judge)
-- `JudgeResult` dataclass — `scores: list[DimensionScore]`, `weighted_score` (normalised by dimension weights), `passed` bool
-- Configurable `pass_threshold` (default 0.7); weights need not sum to 1.0 — the engine normalises them automatically
-- Empty-rubric guard: if a case has no dimensions, returns `passed=False` immediately without an API call
-- Graceful fallback: if the Claude call fails, all scores default to 0.0 and the case is marked failed
-- `run_case()` extended with optional `judge` parameter — when provided, persists `RubricScore` rows (with `dimension_name`) to SQLite and sets `CaseResult.passed`
-- Rubric YAML DSL (`rubrics/research-v1.yaml`, `rubrics/research_agent.yaml`): each dimension defines `id`, `name`, `description`, and `weight`; a suite-level `pass_threshold` key overrides the engine default — schema reference for the M5 CLI loader
+**M5 — FastAPI routes**
+- `/suites`, `/runs`, `/cases`, `/traces`, `/diff` REST endpoints
 
-### Planned
+**M6 — Next.js dashboard**
+- Suite browser, run trigger, pass/fail results with score breakdown
 
-- **FastAPI routes** — `/suites`, `/runs`, `/cases`, `/traces`, `/diff` REST endpoints
-- **Dashboard** — Next.js UI to browse suites, trigger runs, view pass/fail per case, open trace timelines, and diff two runs side-by-side to highlight regressions
-- **CLI** — trigger runs from CI: `rubriclab run --suite=demo`
+**M7 — Trace viewer + diff UI**
+- Timeline of tool calls/messages; side-by-side two-run diff with score deltas
+
+**M8 — demo packaging**
+- `docker compose up --build` runs everything end-to-end
+- `record_demo.sh` triggers two runs with a system-prompt tweak between them, captures screenshots via Playwright (falls back to manual URLs), and saves them to `docs/`
+- `.env.example` documents the only required secret (`ANTHROPIC_API_KEY`)
 
 ---
 
@@ -75,7 +56,14 @@ Most teams ship agents with vibes-based testing — a few manual prompts, no str
 ```bash
 git clone https://github.com/your-org/rubriclab
 cd rubriclab
-docker compose up
+cp .env.example .env          # add your ANTHROPIC_API_KEY
+docker compose up --build
+```
+
+To run the full demo and compare two runs:
+
+```bash
+./record_demo.sh
 ```
 
 - Dashboard: http://localhost:3000
@@ -104,7 +92,7 @@ pnpm dev
 
 ## Architecture
 
-> Architecture as of M4. `AgentRunner`, `ResearchAgent`, SQLite persistence, and `JudgeEngine` are live. REST routes and dashboard ship in M5–M6.
+> M8 shipped end-to-end: all components from AgentRunner through dashboard and diff UI are live.
 
 ```
 ┌─────────────────────────┐    ┌──────────────────────────┐
@@ -140,7 +128,9 @@ pnpm dev
 
 ## Demo flow
 
-> This describes the intended experience at M8. The data model, agent runner, trace capture, and judge engine are live (M1–M4); the REST API, dashboard, and CLI ship in M5–M9.
+![Demo](docs/demo.gif)
+
+> Fully runnable end-to-end as of M8. Every step below works with `docker compose up --build` or local dev.
 
 1. `docker compose up` (or local Python + pnpm dev)
 2. Open dashboard → see preloaded **"Research Agent v1"** suite with 8 cases
@@ -157,12 +147,12 @@ pnpm dev
 |-----------|-------------|--------|
 | M1 | Scaffold + README | ✅ Done |
 | M2 | SQLite data model (SQLModel) | ✅ Done |
-| M3 | Agent runner, trace capture + sample research agent | ✅ Done |
+| M3 | Agent runner + trace capture | ✅ Done |
 | M4 | LLM-as-judge engine | ✅ Done |
-| M5 | FastAPI routes (/suites, /runs, /cases, /traces, /diff) | ⬜ Planned |
-| M6 | Next.js dashboard (suite browser, run trigger, results) | ⬜ Planned |
-| M7 | Trace viewer + two-run diff UI | ⬜ Planned |
-| M8 | End-to-end demo + polish | ⬜ Planned |
+| M5 | FastAPI routes (/suites, /runs, /cases, /traces, /diff) | ✅ Done |
+| M6 | Next.js dashboard (suite browser, run trigger, results) | ✅ Done |
+| M7 | Trace viewer + two-run diff UI | ✅ Done |
+| M8 | Demo packaging (docker compose, record_demo.sh) | ✅ Done |
 | M9 | CLI (`rubriclab run --suite=demo`) | ⬜ Planned |
 
 ---
