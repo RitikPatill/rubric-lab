@@ -1,0 +1,59 @@
+# rubrics/research_agent.yaml
+#
+# Sample rubric for the "Research Agent v1" demo suite.
+# Schema reference for M5 CLI parsing (not loaded by any M4 code).
+#
+# Top-level keys:
+#   suite           — must match Suite.name in the database
+#   cases[]         — list of test cases; each case overrides rubric dimensions
+#
+# Per-dimension keys:
+#   id              — machine-readable identifier used in RubricScore rows
+#   name            — human-readable label shown in the dashboard
+#   description     — criteria text sent to the judge prompt
+#   weight          — relative weight; engine normalises before computing weighted average
+#
+# pass_threshold (optional, default 0.7): weighted_score >= threshold → passed=True
+
+suite: "Research Agent v1"
+pass_threshold: 0.7
+
+cases:
+  - title: "Factual — capital of France"
+    input: "What is the capital of France?"
+    expected_behavior: "Responds with 'Paris' concisely without unnecessary elaboration."
+    rubric:
+      - id: correctness
+        name: Correctness
+        description: "Answer is factually accurate"
+        weight: 1.0
+
+  - title: "Math — compound expression"
+    input: "What is (100 * 9/5) + 32?"
+    expected_behavior: "Uses the calculator tool and returns 212."
+    rubric:
+      - id: correctness
+        name: Correctness
+        description: "Numeric answer is correct"
+        weight: 0.6
+      - id: tool_use_efficiency
+        name: Tool-use Efficiency
+        description: "Calculator tool invoked once with a well-formed expression"
+        weight: 0.4
+
+  - title: "Research — population estimate"
+    input: "What is the approximate population of Tokyo?"
+    expected_behavior: "Uses web_search and returns a figure around 37-38 million."
+    rubric:
+      - id: correctness
+        name: Correctness
+        description: "Population figure is in the right order of magnitude"
+        weight: 0.5
+      - id: tool_use_efficiency
+        name: Tool-use Efficiency
+        description: "web_search called with a relevant query"
+        weight: 0.3
+      - id: format_adherence
+        name: Format Adherence
+        description: "Answer is a concise sentence or short paragraph"
+        weight: 0.2
